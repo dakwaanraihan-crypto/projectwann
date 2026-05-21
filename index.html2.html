@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CyberDino 2077: ProjectWann Mobile</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            background-color: #0b0915;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 800 / 450;
+            background-color: #0a0814;
+            border: 2px solid #33284e;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        #mobileControls {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            max-width: 800px;
+            padding: 15px;
+            gap: 20px;
+        }
+        .btn {
+            flex: 1;
+            height: 60px;
+            background: rgba(29, 21, 54, 0.8);
+            border: 2px solid #00f0ff;
+            border-radius: 8px;
+            color: #00f0ff;
+            font-size: 18px;
+            font-weight: bold;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+        }
+        .btn:active {
+            background: #00f0ff;
+            color: #0b0915;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+        }
+        #btnDuck {
+            border-color: #ff007f;
+            color: #ff007f;
+            box-shadow: 0 0 10px rgba(255, 0, 127, 0.2);
+        }
+        #btnDuck:active {
+            background: #ff007f;
+            color: #0b0915;
+            box-shadow: 0 0 20px rgba(255, 0, 127, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="450"></canvas>
+    </div>
+
+    <div id="mobileControls">
+        <button class="btn" id="btnJump">LOMPAT (TAP)</button>
+        <button class="btn" id="btnDuck">TUNDUK (HOLD)</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        const LEBAR_LAYAR = 800;
+        const TINGGI_LAYAR = 450;
+        const y_tanah_lintasan = TINGGI_LAYAR - 100;
+
+        const WARNA_BG = "#0b0915";
+        const WARNA_CYAN = "#00f0ff";
+        const WARNA_MAGENTA = "#ff007f";
+        const WARNA_ORANYE = "#ff6e00";
+        const WARNA_KUNING = "#f0ff00";
+        const WARNA_METAL_MUDA = "#d2dceb";
+        const WARNA_METAL_TUA = "#414655";
+
+        let kecepatan_game_awal = 6.0;
+        let kecepatan_game = kecepatan_game_awal;
+        let skor_jarak = 0;
+        let skor = 0;
+        let skor_tertinggi = 0;
+        let game_over = false;
+        let waktu_berjalan = 0;
+        let scroll_semesta = 0;
+
+        let intensity_getar = 0;
+        let overdrive_timer = 0;
+        let is_overdrive = false;
+
+        const dino_lebar = 50;
+        const dino_tinggi_normal = 56;
+        const dino_tinggi_tunduk = 34;
+        let dino_ting = dino_tinggi_normal;
+
+        let dino_x = 90;
+        let dino_y = y_tanah_lintasan - dino_tinggi_normal;
+        let kecepatan_y = 0;
+        let gravitasi = 0.85;
+        let kekuatan_lompat = -14.5;
+        let bisa_lompat = true;
+        let menunduk = false;
+
+        let daftar_rintangan = [];
+        let daftar_puing = [];
+        let partikel_ledakan = [];
+
+        // Membuat layout gedung dan keadaan lampu jendela statis sejak awal agar diam stabil
+        let data_gedung = [];
+        for (let i = 0; i < 12; i++) {
+            let lebarGedung = 90 + Math.floor(Math.random() * 40);
+            let tinggiGedung = 180 + Math.floor(Math.random() * 80);
+            
+            // Generate data jendela tetap (statis) agar tidak berubah/berkedip saat game berjalan
+            let susunanJendela = [];
+            for (let wy = (y_tanah_lintasan - tinggiGedung) + 20; wy < y_tanah_lintasan - 20; wy += 25) {
+                for (let wx = 0; wx < lebarGedung - 25; wx += 18) {
+                    let randStatus = Math.random();
+                    let warnaLampu = "#0f0c19"; // Mati
+                    if (randStatus > 0.75) warnaLampu = "#f5e68c"; // Kuning Kantor
+                    else if (randStatus > 0.60) warnaLampu = "#64c8ff"; // Biru Siber
+                    
+                    susunanJendela.push({ relX: wx + 12, y: wy, warna: warnaLampu });
+                }
+            }
+
+            data_gedung.push({
+                x_ratio: i * 140,
+                lebar: lebarGedung,
+                tinggi: tinggiGedung,
+                warna_neon: Math.random() > 0.5 ? WARNA_CYAN : WARNA_MAGENTA,
+                jendela: susunanJendela
+            });
+        }
+
+        class Rintangan {
+            constructor(x, tipeKategori = "bawah") {
+                this.fase_neon = Math.random() * Math.PI;
+                this.tipe_kategori = tipeKategori;
+                
+                if (tipeKategori === "bawah") {
+                    let sub = ["tunggal", "ganda", "tembok"][Math.floor(Math.random() * 3)];
+                    if (sub === "tunggal") {
+                        this.tipe = "laser_tunggal";
+                        this.lebar = 20;
+                        this.tinggi = 55 + Math.floor(Math.random() * 20);
+                        this.x = x;
+                        this.y = y_tanah_lintasan - this.tinggi;
+                    } else if (sub === "ganda") {
+                        this.tipe = "laser_ganda";
+                        this.lebar = 45;
+                        this.tinggi = 50;
+                        this.x = x;
+                        this.y = y_tanah_lintasan - this.tinggi;
+                    } else {
+                        this.tipe = "tembok_baja";
+                        this.lebar = 35;
+                        this.tinggi = 40;
+                        this.x = x;
+                        this.y = y_tanah_lintasan - this.tinggi;
+                    }
+                } else {
+                    this.tipe = "terbang";
+                    this.lebar = 45;
+                    this.tinggi = 30;
+                    this.x = x;
+                    this.y = Math.random() > 0.5 ? y_tanah_lintasan - 75 : y_tanah_lintasan - 45;
+                }
+            }
+        }
+
+        function buatRintanganBaru() {
+            let kategori = "bawah";
+            if (skor >= 500 && Math.random() > 0.5) {
+                kategori = "atas";
+            }
+            return new Rintangan(LEBAR_LAYAR + 50, kategori);
+        }
+
+        daftar_rintangan.push(new Rintangan(LEBAR_LAYAR + 200, "bawah"));
+
+        function renderKomponenGame() {
+            ctx.clearRect(0, 0, LEBAR_LAYAR, TINGGI_LAYAR);
+            ctx.save();
+            
+            // Efek guncangan diaktifkan KHUSUS hanya saat Ultraman menembak laser di background
+            if (intensity_getar > 0) {
+                let gx = Math.floor(Math.random() * (intensity_getar * 2 + 1)) - intensity_getar;
+                let gy = Math.floor(Math.random() * (intensity_getar * 2 + 1)) - intensity_getar;
+                ctx.translate(gx, gy);
+                if (!game_over) intensity_getar--;
+            }
+
+            // 1. Gambar Langit
+            if (skor < 100) {
+                ctx.fillStyle = WARNA_BG;
+                ctx.fillRect(0, 0, LEBAR_LAYAR, y_tanah_lintasan);
+            } else {
+                let factor = Math.min(1.0, (skor - 100) / 50.0);
+                let gradasi = ctx.createLinearGradient(0, 0, 0, y_tanah_lintasan);
+                gradasi.addColorStop(0, `rgb(${Math.floor(35*factor + 11*(1-factor))}, ${Math.floor(12*factor + 9*(1-factor))}, ${Math.floor(50*factor + 21*(1-factor))})`);
+                gradasi.addColorStop(1, `rgb(${Math.floor(220*factor + 11*(1-factor))}, ${Math.floor(55*factor + 9*(1-factor))}, ${Math.floor(105*factor + 21*(1-factor))})`);
+                ctx.fillStyle = gradasi;
+                ctx.fillRect(0, 0, LEBAR_LAYAR, y_tanah_lintasan);
+            }
+
+            // 2. Gambar Gedung Realistis dengan Jendela Diam Semenjak Awal
+            let scroll_dekat = (waktu_berjalan * kecepatan_game * 0.05) % 1200;
+            data_gedung.forEach((g, idx) => {
+                let cx = (idx * 140) - scroll_dekat;
+                if (cx < -150) cx += 1200;
+                let cy = y_tanah_lintasan - g.tinggi;
+                
+                ctx.fillStyle = skor < 100 ? "#1e1c2f" : "#44234e";
+                ctx.fillRect(cx, cy, g.lebar, g.tinggi);
+                ctx.strokeStyle = g.warna_neon;
+                ctx.lineWidth = 1;
+                ctx.strokeRect(cx, cy, g.lebar, g.tinggi);
+
+                // Menggambar lampu jendela statis diam (anti pusing)
+                g.jendela.forEach(j => {
+                    ctx.fillStyle = (skor < 100 && j.warna === "#64c8ff") ? "#0f0c19" : j.warna; 
+                    ctx.fillRect(cx + j.relX, j.y, 8, 12);
+                });
+            });
+
+            // 3. Ultraman Showdown Animasi
+            if (skor >= 100) {
+                let bx = 550, by = y_tanah_lintasan;
+                let ayun_u = Math.sin(waktu_berjalan * 0.08) * 4;
+                let ayun_m = Math.cos(waktu_berjalan * 0.07) * 5;
+                let fase_serang = waktu_berjalan % 180;
+                let warna_siluet = skor < 100 ? "#2a1e41" : "#48234e";
+
+                let mx = bx + 80 + ayun_m, my = by - 120;
+                ctx.fillStyle = warna_siluet;
+                ctx.fillRect(mx + 20, by - 40, 25, 40);
+                ctx.beginPath(); ctx.ellipse(mx + 32, my + 60, 32, 40, 0, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(mx + 25, my + 15, 18, 0, Math.PI*2); ctx.fill();
+
+                let ux = bx + ayun_u, uy = by - 130;
+                ctx.fillRect(ux + 8, uy + 30, 40, 60);
+                ctx.beginPath(); ctx.arc(ux + 28, uy + 12, 15, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = "#fff096"; ctx.beginPath(); ctx.arc(ux + 22, uy + 12, 3, 0, Math.PI*2); ctx.fill();
+
+                if (fase_serang > 130 && fase_serang < 170) {
+                    ctx.strokeStyle = WARNA_CYAN; ctx.lineWidth = 6;
+                    ctx.beginPath(); ctx.moveTo(ux + 52, uy + 45); ctx.lineTo(mx + 15, uy + 45); ctx.stroke();
+                    ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(ux + 52, uy + 45); ctx.lineTo(mx + 15, uy + 45); ctx.stroke();
+                    if (!game_over) intensity_getar = Math.max(intensity_getar, 3);
+                }
+            }
+
+            // 4. Watermark Layer
+            ctx.fillStyle = "rgba(255, 255, 255, 0.13)";
+            ctx.font = "bold 46px 'Courier New'";
+            let mt = ctx.measureText("projectwann");
+            ctx.fillText("projectwann", LEBAR_LAYAR/2 - mt.width/2, 190);
+
+            // 5. Grid Jalan Utama
+            ctx.fillStyle = "#0f0c1d"; ctx.fillRect(0, y_tanah_lintasan, LEBAR_LAYAR, 100);
+            ctx.strokeStyle = skor < 100 ? WARNA_CYAN : WARNA_ORANYE; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(0, y_tanah_lintasan); ctx.lineTo(LEBAR_LAYAR, y_tanah_lintasan); ctx.stroke();
+            
+            ctx.strokeStyle = "#23284b"; ctx.lineWidth = 1;
+            let offset = scroll_semesta % 50;
+            for (let x = -offset; x < LEBAR_LAYAR + 50; x += 50) {
+                ctx.beginPath(); ctx.moveTo(x, y_tanah_lintasan); ctx.lineTo(x - 50, TINGGI_LAYAR); ctx.stroke();
+            }
+
+            // 6. Rintangan & Puing Meteor
+            daftar_rintangan.forEach(obs => {
+                ctx.fillStyle = WARNA_MAGENTA;
+                if (obs.tipe === "laser_tunggal") {
+                    ctx.fillRect(obs.x + 4, obs.y, obs.lebar - 8, obs.tinggi);
+                    ctx.fillStyle = "#fff"; ctx.fillRect(obs.x + 7, obs.y + 4, obs.lebar - 14, obs.tinggi - 8);
+                } else if (obs.tipe === "laser_ganda") {
+                    ctx.fillRect(obs.x, obs.y, 16, obs.tinggi);
+                    ctx.fillRect(obs.x + obs.lebar - 16, obs.y, 16, obs.tinggi);
+                } else if (obs.tipe === "tembok_baja") {
+                    ctx.fillStyle = WARNA_METAL_TUA; ctx.fillRect(obs.x, obs.y, obs.lebar, obs.tinggi);
+                    ctx.fillStyle = WARNA_ORANYE; ctx.beginPath(); ctx.arc(obs.x + obs.lebar/2, obs.y + obs.tinggi/2, 5, 0, Math.PI*2); ctx.fill();
+                } else if (obs.tipe === "terbang") {
+                    ctx.fillStyle = WARNA_METAL_TUA; ctx.fillRect(obs.x, obs.y, obs.lebar, obs.tinggi);
+                    ctx.fillStyle = WARNA_CYAN; ctx.beginPath(); ctx.arc(obs.x + 8, obs.y + obs.tinggi/2, 4, 0, Math.PI*2); ctx.fill();
+                }
+            });
+
+            daftar_puing.forEach(p => {
+                ctx.fillStyle = WARNA_ORANYE; ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2); ctx.fill();
+            });
+
+            // 7. KARAKTER DINO CYBORG UPGRADE DETAIL (TIDAK POLOS)
+            if (!game_over) {
+                ctx.fillStyle = WARNA_METAL_MUDA;
+                if (!menunduk) {
+                    // BARU: Badan Bergaris Pelat Armor (Cyber Paneling)
+                    ctx.fillRect(dino_x, dino_y + 14, 34, 26);
+                    ctx.strokeStyle = "#151225"; ctx.lineWidth = 2;
+                    ctx.strokeRect(dino_x + 5, dino_y + 18, 24, 18); // Sekat Pelat Baja
+
+                    // BARU: Kepala T-Rex Garang dengan Taring Rahang
+                    ctx.fillStyle = WARNA_METAL_MUDA;
+                    ctx.fillRect(dino_x + 18, dino_y - 4, 32, 20); 
+                    // Rahang Bawah & Taring Gigi Neon Hijau/Putih Menyala
+                    ctx.fillStyle = WARNA_CYAN;
+                    ctx.fillRect(dino_x + 36, dino_y + 12, 4, 4);
+                    ctx.fillRect(dino_x + 44, dino_y + 12, 4, 4);
+
+                    // Mata Bersinar Magenta
+                    ctx.fillStyle = WARNA_MAGENTA; ctx.beginPath(); ctx.arc(dino_x + 36, dino_y + 3, 4, 0, Math.PI*2); ctx.fill();
+
+                    // BARU: Ekor Mekanik di Bagian Belakang
+                    ctx.fillStyle = WARNA_METAL_TUA;
+                    ctx.beginPath();
+                    ctx.moveTo(dino_x, dino_y + 24);
+                    ctx.lineTo(dino_x - 14, dino_y + 16);
+                    ctx.lineTo(dino_x - 8, dino_y + 32);
+                    ctx.closePath(); ctx.fill();
+                } else {
+                    // Dino Mode Tunduk Berdetail Pelat
+                    ctx.fillRect(dino_x - 2, dino_y + 8, 40, 18);
+                    ctx.strokeStyle = "#151225"; ctx.lineWidth = 1;
+                    ctx.strokeRect(dino_x + 4, dino_y + 11, 28, 12);
+
+                    ctx.fillStyle = WARNA_METAL_MUDA;
+                    ctx.fillRect(dino_x + 30, dino_y + 4, 24, 16);
+                    // Taring Gigi saat nunduk
+                    ctx.fillStyle = WARNA_CYAN; ctx.fillRect(dino_x + 46, dino_y + 16, 4, 3);
+
+                    ctx.fillStyle = WARNA_MAGENTA; ctx.beginPath(); ctx.arc(dino_x +
