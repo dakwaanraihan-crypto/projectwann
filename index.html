@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CyberDino 2077: ProjectWann Mobile Audio</title>
+    <title>CyberDino 2077: ProjectWann Rocket Overdrive</title>
     <style>
         * {
             box-sizing: border-box;
@@ -132,8 +132,9 @@
         let daftar_rintangan = [];
         let daftar_puing = [];
         let partikel_ledakan = [];
+        let partikel_roket = []; // Array penampung semburan api roket
 
-        // ENGINE GENERATOR EFEK SUARA PROSEDURAL (Web Audio API)
+        // Audio System
         let audioCtx = null;
 
         function inisialisasiAudio() {
@@ -149,14 +150,11 @@
             let gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
             osc.type = "triangle";
             osc.frequency.setValueAtTime(150, audioCtx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.15);
-
             gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
-
             osc.start();
             osc.stop(audioCtx.currentTime + 0.15);
         }
@@ -168,38 +166,32 @@
             let gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
             osc.type = "sawtooth";
             osc.frequency.setValueAtTime(300, audioCtx.currentTime);
             osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.5);
-
             gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-
             osc.start();
             osc.stop(audioCtx.currentTime + 0.5);
         }
 
         function mainkanSuaraLaserBackground() {
             inisialisasiAudio();
-            if (!audioCtx || waktu_berjalan % 10 !== 0) return; // Mengatur tempo suara agar tidak bising
+            if (!audioCtx || waktu_berjalan % 10 !== 0) return;
             let osc = audioCtx.createOscillator();
             let gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-
             osc.type = "sine";
             osc.frequency.setValueAtTime(800, audioCtx.currentTime);
             osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.08);
-
-            gain.gain.setValueAtTime(0.03, audioCtx.currentTime); // Volume background dibuat tipis semata
+            gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
-
             osc.start();
             osc.stop(audioCtx.currentTime + 0.08);
         }
 
-        // Pembuatan Data Gedung
+        // Data Gedung
         let data_gedung = [];
         for (let i = 0; i < 12; i++) {
             let lebarGedung = 90 + Math.floor(Math.random() * 40);
@@ -341,7 +333,7 @@
                     ctx.beginPath(); ctx.moveTo(ux + 52, uy + 45); ctx.lineTo(mx + 15, uy + 45); ctx.stroke();
                     if (!game_over) {
                         intensity_getar = Math.max(intensity_getar, 3);
-                        mainkanSuaraLaserBackground(); // Bunyi laser mecha raksasa
+                        mainkanSuaraLaserBackground();
                     }
                 }
             }
@@ -383,6 +375,12 @@
 
             daftar_puing.forEach(p => {
                 ctx.fillStyle = WARNA_ORANYE; ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2); ctx.fill();
+            });
+
+            // BARU: Merender Efek Partikel Semburan Roket Jet Dino
+            partikel_roket.forEach(p => {
+                ctx.fillStyle = p.warna;
+                ctx.fillRect(p.x, p.y, p.size, p.size);
             });
 
             // 7. Dino Cyborg
@@ -481,6 +479,33 @@
                     dino_y = batas; kecepatan_y = 0; bisa_lompat = true;
                 }
 
+                // BARU: Logika Pembuatan & Pergerakan Api Roket saat Sedang Melayang Melompat
+                if (dino_y < batas) {
+                    // Spawn partikel api dari bagian pantat/bawah Dino
+                    for(let k=0; k<3; k++) {
+                        partikel_roket.push({
+                            x: dino_x + 5,
+                            y: dino_y + 25 + Math.random()*10,
+                            vx: -randomRange(2, 5),
+                            vy: randomRange(1, 4),
+                            warna: Math.random() > 0.4 ? WARNA_ORANYE : WARNA_KUNING,
+                            size: randomRange(3, 6),
+                            life: randomRange(10, 20)
+                        });
+                    }
+                }
+
+                // Perbarui Gerakan Partikel Roket
+                for (let i = partikel_roket.length - 1; i >= 0; i--) {
+                    let p = partikel_roket[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.life--;
+                    if (p.life <= 0) {
+                        partikel_roket.splice(i, 1);
+                    }
+                }
+
                 if (skor >= 300 && Math.random() < 0.02 && daftar_puing.length < 3) {
                     daftar_puing.push({
                         size: 8 + Math.floor(Math.random()*7), x: 300 + Math.random()*600, y: -20,
@@ -527,6 +552,10 @@
             }
         }
 
+        function randomRange(min, max) {
+            return min + Math.random() * (max - min);
+        }
+
         function cekTabrakan(x1, y1, w1, h1, x2, y2, w2, h2) {
             return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
         }
@@ -534,7 +563,7 @@
         function picuKekalahan() {
             game_over = true; 
             intensity_getar = 0; 
-            mainkanSuaraLedakanKalah(); // Bunyi dentuman saat menabrak rintangan
+            mainkanSuaraLedakanKalah();
             if (skor > skor_tertinggi) skor_tertinggi = skor;
             partikel_ledakan = [];
             for (let i = 0; i < 35; i++) {
@@ -549,7 +578,7 @@
 
         function resetGameTotal() {
             daftar_rintangan = [new Rintangan(LEBAR_LAYAR + 100, "bawah")];
-            daftar_puing = []; partikel_ledakan = [];
+            daftar_puing = []; partikel_ledakan = []; partikel_roket = [];
             skor_jarak = 0; skor = 0; kecepatan_game = kecepatan_game_awal;
             overdrive_timer = 0; is_overdrive = false;
             menunduk = false; dino_ting = dino_tinggi_normal;
@@ -562,7 +591,7 @@
             if (bisa_lompat && !menunduk) { 
                 kecepatan_y = kekuatan_lompat; 
                 bisa_lompat = false; 
-                mainkanSuaraLompat(); // Bunyi melompat 8-bit retro
+                mainkanSuaraLompat();
             }
         }
         function aksiTunduk(mulai) {
