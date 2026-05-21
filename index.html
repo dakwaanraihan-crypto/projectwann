@@ -461,4 +461,65 @@
         }
 
         function cekTabrakan(x1, y1, w1, h1, x2, y2, w2, h2) {
-            return x1 < x2 + w2 && x1 + w1 > x
+            return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+        }
+
+        function picuKekalahan() {
+            game_over = true; 
+            intensity_getar = 0; 
+            if (skor > skor_tertinggi) skor_tertinggi = skor;
+            partikel_ledakan = [];
+            for (let i = 0; i < 35; i++) {
+                partikel_ledakan.push({
+                    x: dino_x + dino_lebar/2, y: dino_y + dino_ting/2,
+                    vx: (Math.random() - 0.5) * 12, vy: -4 - Math.random() * 5,
+                    warna: [WARNA_CYAN, WARNA_MAGENTA, WARNA_KUNING][Math.floor(Math.random()*3)],
+                    size: 3 + Math.floor(Math.random()*4), life: 30 + Math.floor(Math.random()*20)
+                });
+            }
+        }
+
+        function resetGameTotal() {
+            daftar_rintangan = [new Rintangan(LEBAR_LAYAR + 100, "bawah")];
+            daftar_puing = []; partikel_ledakan = [];
+            skor_jarak = 0; skor = 0; kecepatan_game = kecepatan_game_awal;
+            overdrive_timer = 0; is_overdrive = false;
+            menunduk = false; dino_ting = dino_tinggi_normal;
+            dino_y = y_tanah_lintasan - dino_ting; kecepatan_y = 0;
+            game_over = false;
+        }
+
+        function aksiLompat() {
+            if (game_over) { resetGameTotal(); return; }
+            if (bisa_lompat && !menunduk) { kecepatan_y = kekuatan_lompat; bisa_lompat = false; }
+        }
+        function aksiTunduk(mulai) {
+            if (game_over || !bisa_lompat) return;
+            if (mulai) {
+                menunduk = true; dino_ting = dino_tinggi_tunduk; dino_y = y_tanah_lintasan - dino_tinggi_tunduk;
+            } else {
+                menunduk = false; dino_ting = dino_tinggi_normal; dino_y = y_tanah_lintasan - dino_tinggi_normal;
+            }
+        }
+
+        document.getElementById("btnJump").addEventListener("touchstart", (e) => { e.preventDefault(); aksiLompat(); });
+        document.getElementById("btnDuck").addEventListener("touchstart", (e) => { e.preventDefault(); aksiTunduk(true); });
+        document.getElementById("btnDuck").addEventListener("touchend", (e) => { e.preventDefault(); aksiTunduk(false); });
+
+        window.addEventListener("keydown", (e) => {
+            if (e.code === "Space" || e.code === "ArrowUp") aksiLompat();
+            if (e.code === "ArrowDown") aksiTunduk(true);
+        });
+        window.addEventListener("keyup", (e) => {
+            if (e.code === "ArrowDown") aksiTunduk(false);
+        });
+
+        function engineLoop() {
+            updateSiklusFisika();
+            renderKomponenGame();
+            requestAnimationFrame(engineLoop);
+        }
+        engineLoop();
+    </script>
+</body>
+</html>
