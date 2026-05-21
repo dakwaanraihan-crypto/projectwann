@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CyberDino 2077: ProjectWann Mobile</title>
+    <title>CyberDino 2077: ProjectWann Mobile Audio</title>
     <style>
         * {
             box-sizing: border-box;
@@ -133,7 +133,73 @@
         let daftar_puing = [];
         let partikel_ledakan = [];
 
-        // Pembuatan Data Gedung & Lampu Jendela (Sudah diperbaiki mutlak)
+        // ENGINE GENERATOR EFEK SUARA PROSEDURAL (Web Audio API)
+        let audioCtx = null;
+
+        function inisialisasiAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function mainkanSuaraLompat() {
+            inisialisasiAudio();
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.type = "triangle";
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.15);
+
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15);
+        }
+
+        function mainkanSuaraLedakanKalah() {
+            inisialisasiAudio();
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.type = "sawtooth";
+            osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(40, audioCtx.currentTime + 0.5);
+
+            gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        function mainkanSuaraLaserBackground() {
+            inisialisasiAudio();
+            if (!audioCtx || waktu_berjalan % 10 !== 0) return; // Mengatur tempo suara agar tidak bising
+            let osc = audioCtx.createOscillator();
+            let gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.linearRampToValueAtTime(600, audioCtx.currentTime + 0.08);
+
+            gain.gain.setValueAtTime(0.03, audioCtx.currentTime); // Volume background dibuat tipis semata
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.08);
+        }
+
+        // Pembuatan Data Gedung
         let data_gedung = [];
         for (let i = 0; i < 12; i++) {
             let lebarGedung = 90 + Math.floor(Math.random() * 40);
@@ -273,7 +339,10 @@
                     ctx.beginPath(); ctx.moveTo(ux + 52, uy + 45); ctx.lineTo(mx + 15, uy + 45); ctx.stroke();
                     ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
                     ctx.beginPath(); ctx.moveTo(ux + 52, uy + 45); ctx.lineTo(mx + 15, uy + 45); ctx.stroke();
-                    if (!game_over) intensity_getar = Math.max(intensity_getar, 3);
+                    if (!game_over) {
+                        intensity_getar = Math.max(intensity_getar, 3);
+                        mainkanSuaraLaserBackground(); // Bunyi laser mecha raksasa
+                    }
                 }
             }
 
@@ -316,7 +385,7 @@
                 ctx.fillStyle = WARNA_ORANYE; ctx.beginPath(); ctx.arc(p.x, p.y, p.size/2, 0, Math.PI*2); ctx.fill();
             });
 
-            // 7. Dino Cyborg Detail Tinggi
+            // 7. Dino Cyborg
             if (!game_over) {
                 ctx.fillStyle = WARNA_METAL_MUDA;
                 if (!menunduk) {
@@ -354,7 +423,6 @@
                     ctx.fillRect(dino_x + Math.random()*34, dino_y + Math.random()*30, 4, 4);
                 }
 
-                // FIXED: Memperbaiki variabel eror penyebab blank screen kemarin malam
                 ctx.fillStyle = WARNA_METAL_TUA;
                 let ayun = dino_y === (y_tanah_lintasan - dino_ting) ? Math.sin(waktu_berjalan * 0.35) * 6 : 0;
                 ctx.fillRect(dino_x + 8, dino_y + dino_ting - 14, 8, 10 + ayun);
@@ -391,7 +459,6 @@
             waktu_berjalan++;
             
             if (!game_over) {
-                // Jika skor sudah menyentuh 200, lari dipercepat
                 if (skor >= 200) {
                     is_overdrive = true;
                 } else {
@@ -467,6 +534,7 @@
         function picuKekalahan() {
             game_over = true; 
             intensity_getar = 0; 
+            mainkanSuaraLedakanKalah(); // Bunyi dentuman saat menabrak rintangan
             if (skor > skor_tertinggi) skor_tertinggi = skor;
             partikel_ledakan = [];
             for (let i = 0; i < 35; i++) {
@@ -491,7 +559,11 @@
 
         function aksiLompat() {
             if (game_over) { resetGameTotal(); return; }
-            if (bisa_lompat && !menunduk) { kecepatan_y = kekuatan_lompat; bisa_lompat = false; }
+            if (bisa_lompat && !menunduk) { 
+                kecepatan_y = kekuatan_lompat; 
+                bisa_lompat = false; 
+                mainkanSuaraLompat(); // Bunyi melompat 8-bit retro
+            }
         }
         function aksiTunduk(mulai) {
             if (game_over || !bisa_lompat) return;
